@@ -1,0 +1,48 @@
+# Secrets — never commit. Use .env.example as the schema.
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs / temp
+*.log
+*.tmp
+*.pid
+.cache/
+tmp/
+temp/
+
+# Build / coverage
+dist/
+build/
+out/
+coverage/
+*.lcov
+.nyc_output/
+
+# Dependencies (pick what applies to your stack — leave the rest)
+node_modules/
+.pnpm-store/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.tox/
+target/
+vendor/
+
+# Test artefacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local agent state — never commit
+.claude/local/
+.claude/sessions/

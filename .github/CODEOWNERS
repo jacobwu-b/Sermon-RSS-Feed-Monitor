@@ -1,0 +1,41 @@
+# CODEOWNERS — auto-assigns reviewers and gates merge for protected paths.
+#
+# SHIPPED INERT, ON PURPOSE. Every rule below is commented out.
+#
+# A CODEOWNERS file containing placeholders — `@[org]/core`, `@your-team` — is
+# not a partially-configured gate. `[` and `]` are not legal in a GitHub handle,
+# so GitHub reports the whole file as malformed, assigns no owner to any path,
+# and the "Require review from Code Owners" rule enforces nothing while the
+# settings document goes on claiming it is on. A gate that exists only in prose
+# is worse than no gate: it is counted as protection by everyone who reads about
+# it and by nobody who relies on it.
+#
+# To enable, in ONE change: uncomment the rules you want with real handles,
+# confirm each resolves (GitHub shows an error banner on this file's page if one
+# does not), and turn on "Require review from Code Owners" in main's ruleset.
+# Turning either on without the other is the failure above. Note that on a
+# single-maintainer repo this rule routes review of the author's work back to
+# the author, which is a rubber stamp — leave it off until a second reviewer
+# exists.
+#
+# Syntax: <pattern> <@user-or-team> [<@user-or-team>...]
+# More specific lines override less specific ones.
+
+# Default — everything needs review by core
+# * @your-org/core
+
+# The operating system itself — changes need senior sign-off
+# /CLAUDE.md            @your-org/staff
+# /.claude/             @your-org/staff
+# /.github/             @your-org/staff
+# /docs/decisions/      @your-org/staff
+
+# Specs — product + engineering
+# /docs/specs/          @your-org/core @your-org/product
+
+# Migrations — extra eyes on irreversible work
+# /migrations/          @your-org/staff
+# /db/migrations/       @your-org/staff
+
+# Evals — quality gate, owned by staff
+# /evals/               @your-org/staff

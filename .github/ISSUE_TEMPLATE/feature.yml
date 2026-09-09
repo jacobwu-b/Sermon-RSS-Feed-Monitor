@@ -1,0 +1,51 @@
+name: Feature
+description: A new capability or behavior change
+title: "[P?][?] "
+labels: ["feature"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Whose problem, and what's the cost of not fixing it. Not a solution.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: What does success look like, observable from the outside?
+    validations:
+      required: true
+  - type: input
+    id: spec
+    attributes:
+      label: Spec
+      description: Link to docs/specs/<file>.md, or "to be written" with assignee.
+    validations:
+      required: true
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      description: Effort estimate for the build. Criteria in docs/sizing.md.
+      options:
+        - Xs
+        - S
+        - M
+        - L
+        - Xl
+    validations:
+      required: true
+  - type: input
+    id: size_justification
+    attributes:
+      label: Size justification
+      description: 'One phrase pointing at the trigger that decided the size, e.g. "M: new feature, ~6 files."'
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Constraints, prior art, open questions. Optional.

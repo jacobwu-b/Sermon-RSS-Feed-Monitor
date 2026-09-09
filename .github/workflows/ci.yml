@@ -1,0 +1,126 @@
+# CI — required checks for every PR.
+#
+# Job names must match .github/required-checks.json, which is what the ruleset
+# requires and what the automation asserts. RENAMING A JOB IS A ROLLOUT, NOT AN
+# EDIT: the live ruleset requires contexts by name and cannot be changed from
+# CI, so either order done in one step deadlocks every open PR. See the note in
+# required-checks.json before touching a name.
+#
+# Replace the `run:` commands with your stack's tooling. The job structure
+# (static checks, test, secret scan, evals) is the contract — keep all four.
+#
+# COST NOTE: Actions bills per job, rounded up to the minute. Lint, Types, and
+# Build were once three separate jobs, each paying for its own runner and its
+# own dependency install to do seconds of work — three billed minutes for well
+# under one. They're merged into the `Static checks` job below: one install,
+# every step running via `if: always()` even when an earlier one failed, so one
+# run reports every failure. Merging further jobs in later is a rename of a
+# required context — see the ADR trail in docs/decisions/ for how this repo did
+# it, and required-checks.json's note for the live-ruleset rollout it needs.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  # No `push: [main]`. With squash-merge and required checks, every commit that
+  # reaches main was already proven green on its PR, so re-running the whole
+  # suite on push buys a verdict you already have and bills for it on every
+  # merge. This daily run instead catches the drift a PR run cannot see — a
+  # flaky test, a direct push, a floating action major, an upstream that moved —
+  # for a fixed cost rather than one proportional to merge rate. Off the hour
+  # deliberately: scheduled runs are shed hardest at :00.
+  schedule:
+    - cron: "37 12 * * *"
+  workflow_dispatch:
+  # No `merge_group:` trigger. A merge queue needs an org-owned public repo or
+  # Enterprise Cloud, so on most repositories created from this template the
+  # trigger can never fire. Add it back in the same change that enables a queue,
+  # never before — an event that cannot fire is indistinguishable from one that
+  # fires and does nothing.
+
+# Cancel superseded runs on the same branch — saves CI minutes during
+# rapid agent iteration.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Asserted, not assumed: every job here runs your linter, type checker, test
+# runner and build over a checkout of an untrusted pull-request head. None of
+# them needs to write anything, so the workflow-level default is read-only and
+# a job that needs more widens its own block explicitly. A token scope that is
+# merely expected to be read-only is not one.
+permissions:
+  contents: read
+
+jobs:
+  static-checks:
+    name: Static checks
+    runs-on: ubuntu-latest
+    # GitHub's default job timeout is SIX HOURS. A job that hangs — a wedged
+    # network call, a runner that stops reporting, a shell waiting on stdin
+    # nobody will supply — bills all of them before it is reclaimed, and a hung
+    # job looks exactly like a running one from outside. Size these from your
+    # measured maximum with headroom; the point is to bound a pathology, not to
+    # police normal variance.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up toolchain
+        run: echo "TODO — install your runtime"
+      - name: Install
+        run: echo "TODO — install deps from lockfile, fail on drift"
+      - name: Lint
+        if: always()
+        run: echo "TODO — your lint command"
+      - name: Typecheck
+        if: always()
+        run: echo "TODO — your typecheck command"
+      - name: Build
+        if: always()
+        run: echo "TODO — your build command"
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up toolchain
+        run: echo "TODO"
+      - name: Install
+        run: echo "TODO"
+      - name: Test
+        run: echo "TODO — your test command"
+
+  # Evals: regression suite for the AI agent. PRs that regress evals don't merge.
+  # Disable this job until you have ≥20 eval tasks in evals/tasks/ (see brief, Pillar 5).
+  evals:
+    name: Evals
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: false # flip to `true` once evals/tasks/ has ≥20 tasks
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run evals
+        run: echo "TODO — your eval runner"
+
+  # Secret scan — defence in depth. GitHub also scans on push, but this
+  # blocks the merge if the push scan was bypassed.
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Widens the read-only workflow default by exactly `pull-requests: read`,
+    # which the scanner needs.
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

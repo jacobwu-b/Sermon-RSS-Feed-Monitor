@@ -1,0 +1,109 @@
+name: Merge train
+
+# OPTIONAL — only relevant if this repo lacks a real GitHub merge queue. Merge
+# queue needs an org-owned public repo or GitHub Enterprise Cloud
+# (repo-settings.md → "Pull requests"); a user-owned private repo cannot have
+# one at any price. This is the plan-independent substitute: serialize queued
+# PRs by hand, one at a time, using GitHub's own `update-branch` + auto-merge
+# rather than a human running `git merge`/`git rebase` (CLAUDE.md §5, the
+# merge-train exemption).
+#
+# Mechanism: label a ready, approved, green PR `queue:ready`. This workflow
+# picks the OLDEST such PR (by when the label was applied, not PR age — a
+# week-old PR just labelled must not jump the line, and a PR evicted and
+# relabelled must reset to the back), updates its branch against the current
+# tip of main, and enables auto-merge so GitHub completes the squash-merge
+# itself once checks report green. It never evaluates checks or resolves a
+# conflict — a conflicting or red head is evicted with a comment explaining
+# why, exactly as CLAUDE.md's invariant requires (stop and report, don't
+# resolve).
+#
+# Requires the `queue:ready` label (.github/settings.yml) and
+# `allow_auto_merge: true` (already set there).
+#
+# No schedule: trigger. The label is unused (see #31) — a 10-minute poll
+# billed 4,320 min/mo to do 4 seconds of work per tick, on a queue that has
+# never had a PR in it. workflow_dispatch keeps the mechanism testable by
+# hand. When the label is actually adopted, re-enable via event triggers
+# (pull_request: types: [labeled], push: branches: [main]) rather than a
+# poll — see merge-train.test.sh, which fails the day this pairing changes.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  advance:
+    name: Advance the head of the queue
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Find and advance the oldest queue:ready PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          numbers="$(gh pr list --repo "$REPO" --state open --label queue:ready \
+            --json number --jq '.[].number')"
+
+          if [ -z "$numbers" ]; then
+            echo "Queue empty."
+            exit 0
+          fi
+
+          # Order by when queue:ready was most recently applied, oldest first —
+          # not PR number, which conflates "opened first" with "queued first".
+          oldest_number=""
+          oldest_time=""
+          for n in $numbers; do
+            labeled_at="$(gh api "repos/$REPO/issues/$n/timeline" --paginate \
+              --jq '[.[] | select(.event == "labeled" and .label.name == "queue:ready") | .created_at] | last')"
+            if [ -z "$labeled_at" ] || [ "$labeled_at" = "null" ]; then
+              continue
+            fi
+            if [ -z "$oldest_time" ] || [[ "$labeled_at" < "$oldest_time" ]]; then
+              oldest_time="$labeled_at"
+              oldest_number="$n"
+            fi
+          done
+
+          if [ -z "$oldest_number" ]; then
+            echo "::warning::queue:ready PRs exist but none have a readable 'labeled' timeline entry — skipping this tick"
+            exit 0
+          fi
+
+          echo "Head of queue: #$oldest_number (queued $oldest_time)"
+
+          mergeable="$(gh pr view "$oldest_number" --repo "$REPO" --json mergeable --jq .mergeable)"
+          if [ "$mergeable" = "CONFLICTING" ]; then
+            gh pr comment "$oldest_number" --repo "$REPO" \
+              --body "Evicted from the merge queue: this branch conflicts with main. Rebase is not run automatically — resolve locally and re-add \`queue:ready\` when green."
+            gh pr edit "$oldest_number" --repo "$REPO" --remove-label queue:ready
+            exit 0
+          fi
+
+          rollup="$(gh pr view "$oldest_number" --repo "$REPO" --json statusCheckRollup \
+            --jq '[.statusCheckRollup[].conclusion // .statusCheckRollup[].state] | if any(. == "FAILURE" or . == "failure" or . == "ERROR" or . == "error") then "red" else "ok" end')"
+          if [ "$rollup" = "red" ]; then
+            gh pr comment "$oldest_number" --repo "$REPO" \
+              --body "Evicted from the merge queue: a required check is failing. Fix it and re-add \`queue:ready\`."
+            gh pr edit "$oldest_number" --repo "$REPO" --remove-label queue:ready
+            exit 0
+          fi
+
+          # The one write this workflow makes to a branch it doesn't own —
+          # see the merge-train exemption in CLAUDE.md §5.
+          gh api -X PUT "repos/$REPO/pulls/$oldest_number/update-branch" || \
+            echo "::notice::update-branch reported nothing to do for #$oldest_number (already current, or GitHub is still computing mergeability) — will retry next tick"
+
+          # Idempotent: GitHub no-ops if auto-merge is already enabled.
+          gh pr merge "$oldest_number" --repo "$REPO" --auto --squash || true

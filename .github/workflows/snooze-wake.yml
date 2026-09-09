@@ -1,0 +1,63 @@
+name: Snooze wake
+
+# Reopens issues snoozed via the `snooze-issue` skill (.claude/skills/snooze-issue)
+# once their wake date has passed. GitHub has no native snooze — closing the issue
+# with a `snoozed` label and a `<!-- snooze-until: YYYY-MM-DD -->` marker in the
+# body is the whole mechanism; this is the daily check that reads the marker back.
+#
+# Stateless by design: nothing here remembers which issues are snoozed between
+# runs, or when they were snoozed. The marker in the issue body is the only state,
+# so a run that fails or is skipped loses nothing — the next run re-derives
+# everything from the live label + body.
+
+on:
+  schedule:
+    # Once a day. Off-hour minute — scheduled workflows are delayed most at :00.
+    - cron: "17 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  wake:
+    name: Reopen snoozed issues past their wake date
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Reopen issues whose snooze-until date has passed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          today="$(date -u +%Y-%m-%d)"
+
+          numbers="$(gh issue list --repo "$REPO" --state closed --label snoozed \
+            --json number --jq '.[].number')"
+
+          for n in $numbers; do
+            body="$(gh issue view "$n" --repo "$REPO" --json body --jq .body)"
+
+            # Strict format only — anything else is left alone rather than guessed at.
+            wake_date="$(printf '%s' "$body" \
+              | grep -oE '<!-- *snooze-until: *[0-9]{4}-[0-9]{2}-[0-9]{2} *-->' \
+              | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' \
+              | head -n1 || true)"
+
+            if [ -z "$wake_date" ]; then
+              echo "::warning::issue #$n is labeled snoozed but has no readable snooze-until marker in its body — skipping"
+              continue
+            fi
+
+            if [[ "$wake_date" > "$today" ]]; then
+              continue
+            fi
+
+            echo "Waking issue #$n (snooze-until $wake_date, today $today)"
+            gh issue reopen "$n" --repo "$REPO"
+            gh issue edit "$n" --repo "$REPO" --remove-label snoozed
+            gh issue comment "$n" --repo "$REPO" \
+              --body "Reopened automatically — snooze-until $wake_date has passed."
+          done

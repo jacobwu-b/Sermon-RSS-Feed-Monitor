@@ -1,0 +1,52 @@
+name: Tech debt
+description: Something the agent or a human noticed but did not fix
+title: "[P?][?] "
+labels: ["tech-debt"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What's wrong
+      description: Be concrete. "Bad" is not a problem statement.
+    validations:
+      required: true
+  - type: textarea
+    id: where
+    attributes:
+      label: Where
+      description: File path(s), function names, or component.
+  - type: textarea
+    id: why_now
+    attributes:
+      label: Why this matters now
+      description: What does this debt cost us? Bugs? Slow reviews? Onboarding pain?
+  - type: textarea
+    id: shape
+    attributes:
+      label: Shape of the fix
+      description: Rough approach. Not a plan. Optional.
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      description: Effort estimate for the fix. Criteria in docs/sizing.md.
+      options:
+        - Xs
+        - S
+        - M
+        - L
+        - Xl
+    validations:
+      required: true
+  - type: input
+    id: size_justification
+    attributes:
+      label: Size justification
+      description: 'One phrase pointing at the trigger that decided the size; note the risk flag if it fires, e.g. "S, schema-flagged: one-field migration, needs an ADR."'
+    validations:
+      required: true
+  - type: input
+    id: surfaced_in
+    attributes:
+      label: Surfaced in
+      description: PR or commit where this was noticed.

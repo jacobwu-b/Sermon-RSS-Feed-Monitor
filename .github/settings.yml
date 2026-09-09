@@ -1,0 +1,70 @@
+# Applied automatically by the Probot Settings app
+# (https://github.com/apps/settings) on every push to main.
+#
+# This file mirrors the settings documented in repo-settings.md.
+# When you change one, change the other in the same PR.
+
+repository:
+  default_branch: main
+  has_issues: true
+  has_projects: true
+  has_wiki: false
+  has_discussions: false
+  allow_squash_merge: true
+  allow_merge_commit: false
+  allow_rebase_merge: false
+  allow_auto_merge: true
+  delete_branch_on_merge: true
+  squash_merge_commit_title: PR_TITLE
+  squash_merge_commit_message: PR_BODY
+
+labels:
+  - name: bug
+    color: d73a4a
+    description: Broken behavior
+  - name: tech-debt
+    color: fbca04
+    description: Out-of-scope cleanup or fragility surfaced during work
+  - name: feature
+    color: 0e8a16
+    description: New capability or behavior change
+  - name: spec-needed
+    color: 5319e7
+    description: Cannot start until a spec exists in docs/specs/
+  - name: blocked
+    color: b60205
+    description: Cannot proceed; needs a decision or external action
+  - name: dependencies
+    color: 0366d6
+    description: Dependency update raised by Dependabot
+  - name: "dependencies:major"
+    color: b60205
+    description: Major dependency bump — held for monthly reconciliation, not auto-merged
+  - name: dependency-reconciliation
+    color: 5319e7
+    description: Monthly tracking issue aggregating held major dependency updates
+  - name: snoozed
+    color: c5def5
+    description: Closed and held until its snooze-until date; see .claude/skills/snooze-issue
+  - name: "queue:ready"
+    color: 0e8a16
+    description: Approved and green — waiting for the merge train to serialize it onto main
+
+# NOTE: `main`'s protections are NOT managed here.
+#
+# They live in a GitHub **Ruleset**, because the feature the Dependabot
+# automation needs — a per-actor review bypass for Dependabot — cannot be
+# expressed in the Probot Settings app's legacy `branches[].protection` block.
+# The same set of gates (strict status checks, signed commits, linear history,
+# conversation resolution, required review) is preserved; review simply gains a
+# Dependabot bypass.
+#
+# Apply the ruleset and retire the old legacy branch protection using the
+# ordered `gh api` commands in repo-settings.md ("Branch protection — main"). Do
+# not re-add a `branches:` block here without updating that section, or the
+# legacy protection and the ruleset will both try to govern `main`.
+#
+# THIS FILE IS INTENT, NOT STATE. It is applied only if the Probot Settings app
+# is actually installed on the repository or org; if it is not, nothing here has
+# ever taken effect and no error is reported anywhere. Verify against the live
+# API (repo-settings.md → "Verifying") before believing any of it.

@@ -1,0 +1,79 @@
+name: Queue stall alert
+
+# OPTIONAL — pairs with merge-train.yml. The train evicts the failures it
+# predicts (a conflict, a red head) with a comment explaining why. Everything
+# it does not predict looks identical to slowness: the PR sits labelled
+# queue:ready and nothing merges, and nothing reports it. This is that report.
+#
+# The stall clock starts from the most recent time queue:ready was *applied*
+# (the issue timeline's last matching `labeled` event), matching
+# merge-train.yml's own ordering — a week-old PR just labelled must not fire,
+# and a PR evicted and relabelled must have its clock reset rather than
+# accumulate age from its first application.
+#
+# No email or chat boundary here deliberately — this template doesn't assume
+# one exists. It posts a PR comment (once per stall, not once per run — see
+# the guard below) and a workflow annotation. If this repo has a notification
+# boundary of its own (CLAUDE.md §6), route the alert through it instead of,
+# or in addition to, the comment.
+
+on:
+  schedule:
+    # Once a day. Off-hour minute — scheduled workflows are delayed most at :00.
+    - cron: "43 14 * * *"
+  workflow_dispatch:
+
+env:
+  QUEUE_LABEL: "queue:ready"
+  QUEUE_STALL_HOURS: "24"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check:
+    name: Check for a stalled queue:ready PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Alert on any PR that has worn queue:ready past the threshold
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          now_epoch="$(date -u +%s)"
+          threshold_seconds="$(( QUEUE_STALL_HOURS * 3600 ))"
+
+          numbers="$(gh pr list --repo "$REPO" --state open --label "$QUEUE_LABEL" \
+            --json number --jq '.[].number')"
+
+          for n in $numbers; do
+            labeled_at="$(gh api "repos/$REPO/issues/$n/timeline" --paginate \
+              --jq '[.[] | select(.event == "labeled" and .label.name == "'"$QUEUE_LABEL"'") | .created_at] | last')"
+            if [ -z "$labeled_at" ] || [ "$labeled_at" = "null" ]; then
+              continue
+            fi
+
+            labeled_epoch="$(date -u -d "$labeled_at" +%s)"
+            age_seconds="$(( now_epoch - labeled_epoch ))"
+
+            if [ "$age_seconds" -lt "$threshold_seconds" ]; then
+              continue
+            fi
+
+            # Don't re-alert every day the PR stays stalled: skip if the last
+            # comment already covers this stall window.
+            already_alerted="$(gh pr view "$n" --repo "$REPO" --json comments \
+              --jq '[.comments[] | select(.body | test("stalled in the merge queue"))] | length > 0')"
+            if [ "$already_alerted" = "true" ]; then
+              continue
+            fi
+
+            hours="$(( age_seconds / 3600 ))"
+            echo "::warning::PR #$n has been stalled in the merge queue for ${hours}h"
+            gh pr comment "$n" --repo "$REPO" \
+              --body "This PR has been stalled in the merge queue (\`$QUEUE_LABEL\`) for over ${QUEUE_STALL_HOURS}h without merging. The merge train evicts predicted failures (conflicts, red checks) with a comment — this isn't one of those. Check the train's own run history for what's blocking it."
+          done

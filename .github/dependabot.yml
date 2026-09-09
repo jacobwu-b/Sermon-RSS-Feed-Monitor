@@ -1,0 +1,43 @@
+version: 2
+
+# Group minor + patch updates into a single PR per ecosystem per week.
+# Major bumps stay separate — CLAUDE.md §6 requires changelog review.
+#
+# Minor/patch PRs auto-merge once CI passes; major bumps are held and labeled
+# `dependencies:major` for the monthly reconciliation. See the
+# dependabot-auto-merge / dependabot-reconciliation workflows.
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies"]
+    open-pull-requests-limit: 10
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # Uncomment + adjust per stack:
+  #
+  # - package-ecosystem: "npm"
+  #   directory: "/"
+  #   schedule:
+  #     interval: "weekly"
+  #   labels: ["dependencies"]
+  #   open-pull-requests-limit: 10
+  #   groups:
+  #     prod-minor-patch:
+  #       dependency-type: "production"
+  #       update-types: ["minor", "patch"]
+  #     dev-minor-patch:
+  #       dependency-type: "development"
+  #       update-types: ["minor", "patch"]
+  #
+  # - package-ecosystem: "pip"
+  #   directory: "/"
+  #   schedule:
+  #     interval: "weekly"
+  #   labels: ["dependencies"]
+  #   open-pull-requests-limit: 10

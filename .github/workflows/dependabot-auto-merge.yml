@@ -1,0 +1,123 @@
+name: Dependabot auto-merge
+
+# Enable auto-merge for low-risk Dependabot PRs (semver minor/patch, which covers
+# the grouped dev/prod batches in dependabot.yml). Only the human review click is
+# bypassed, via the Dependabot bypass on main's ruleset (see repo-settings.md →
+# "Branch protection — main"); the test gate is not.
+#
+# That last sentence used to be asserted here as a fact, and it is not one this
+# workflow can know. `gh pr merge --auto` returns success whether it queued behind
+# five required checks or merged on the spot because main required none — absence
+# and success are the same exit code at the call site. A repository built on this
+# template found that out when a Dependabot PR merged twenty-one seconds after it
+# opened, with every check still running, shipping a lockfile that broke every job
+# on every open PR.
+#
+# So the gate is asserted, not assumed (CLAUDE.md §6, Controls): before any merge
+# call, this job queries main's live ruleset and refuses when the contexts in
+# .github/required-checks.json are not required, or when branches are not required
+# to be up to date. The silent fail-open becomes a loud failure.
+#
+# Major bumps are never auto-merged: they are labeled `dependencies:major` and
+# left open for the monthly reconciliation (see dependabot-reconciliation.yml).
+# CLAUDE.md §6 requires changelog review for major bumps.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+defaults:
+  run:
+    # Explicit, because the assertion below depends on it: bash is invoked with
+    # `-e -o pipefail`, so a failing `gh api` inside a pipeline aborts the step
+    # rather than yielding an empty list that would read as "nothing required".
+    shell: bash
+
+jobs:
+  auto-merge:
+    # Only act on Dependabot's own PRs.
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # The contract is read from the PR's BASE commit, never from the head of the
+      # Dependabot branch this job is gating. A PR must not be able to edit the
+      # list of checks that gates it.
+      - name: Check out the base commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      # Unconditional, and ordered before every merge call. A gate behind an `if:`
+      # or after the merge is not a gate.
+      - name: Assert main enforces the checks this job depends on
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          rules="$(gh api "repos/$GH_REPO/rules/branches/main")"
+
+          want="$(jq -r '.checks[]' .github/required-checks.json | sort)"
+          live="$(printf '%s' "$rules" | jq -r '
+            [.[] | select(.type == "required_status_checks")
+                 | .parameters.required_status_checks[].context] | .[]' | sort)"
+
+          missing="$(comm -23 <(printf '%s\n' "$want") <(printf '%s\n' "$live"))"
+          if [ -n "$missing" ]; then
+            echo "::error::main does not require these status checks, so auto-merge has nothing to wait for:"
+            printf '%s\n' "$missing" | sed 's/^/  /'
+            echo "Repair main's ruleset (repo-settings.md → Branch protection) before this job can merge anything."
+            exit 1
+          fi
+
+          strict="$(printf '%s' "$rules" | jq -r '
+            [.[] | select(.type == "required_status_checks")
+                 | .parameters.strict_required_status_checks_policy] | any(. == true)')"
+          if [ "$strict" != "true" ]; then
+            echo "::error::main does not require branches to be up to date before merging."
+            echo "Without it a PR is merged against a base it was never tested on."
+            exit 1
+          fi
+
+          echo "main requires: $(printf '%s' "$live" | tr '\n' ' ')"
+
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge for minor and patch updates
+        if: >-
+          steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+
+      - name: Hold major updates for monthly reconciliation
+        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+        run: |
+          # This job has no actions/checkout step, so gh has no local git repo to
+          # infer the target from — GH_REPO (set below) supplies it. Without that,
+          # gh label create / pr edit fail with "fatal: not a git repository".
+          #
+          # Ensure the label exists before adding it. settings.yml declares it,
+          # but the Probot Settings app may not have synced yet — without this
+          # guard `--add-label` errors with "label not found" and the job fails.
+          gh label create "dependencies:major" \
+            --color b60205 \
+            --description "Major dependency bump — held for monthly reconciliation, not auto-merged" \
+            --force
+          gh pr edit "$PR_URL" --add-label "dependencies:major"
+          gh pr comment "$PR_URL" --body "Holding this **major** update for the monthly dependency reconciliation. It will be picked up in the next \`Monthly dependency reconciliation\` tracking issue rather than auto-merged."
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}

@@ -1,0 +1,8 @@
+{
+  "note": "The status checks main's ruleset must require. Single source of truth: .github/workflows/dependabot-auto-merge.yml asserts main enforces these before it merges anything, .github/repo-settings.md documents them by reference rather than restating them, and any other automation that depends on the gate should read this file rather than hard-coding a list. Contexts must equal the ENABLED job names in .github/workflows/ci.yml. A job under `if: false` reports no check run, so requiring its name here would be a gate nothing can ever satisfy — add Evals only when ci.yml turns it on. Changing this list is a rollout, not an edit: main's live ruleset requires contexts by name and usually cannot be changed from CI. RENAMING: narrow the live ruleset to the unchanged contexts, merge, then widen it. REMOVING: narrow the live ruleset FIRST, then merge, because a PR that has stopped reporting a still-required context can never satisfy it — and note that the gate below reads this file from the base commit and will refuse to act during that window, so merge that one PR directly.",
+  "checks": [
+    "Static checks",
+    "Test",
+    "Secret scan"
+  ]
+}

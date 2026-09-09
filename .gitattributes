@@ -1,0 +1,19 @@
+# Normalize line endings on commit
+* text=auto eol=lf
+
+# Lock files — readable in PRs but not as diffs
+package-lock.json -diff
+yarn.lock -diff
+pnpm-lock.yaml -diff
+poetry.lock -diff
+Cargo.lock -diff
+go.sum -diff
+
+# Binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
