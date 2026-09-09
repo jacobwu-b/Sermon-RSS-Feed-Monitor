@@ -1,0 +1,79 @@
+# Polls every enabled church's RSS feed and commits any newly-discovered
+# sermons to data/<church>.json, emailing about them per CHURCHES' notify flag.
+#
+# Runs on GitHub Actions' minimum schedule granularity (5 minutes) so a new
+# episode is caught as close to publish time as realistically possible.
+# Scheduled runs can still be delayed or dropped under GitHub's load — this is
+# "as frequently as possible", not a delivery guarantee.
+
+name: Poll church feeds
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: "Seed the ledger from full feed history, without sending any notification."
+        type: boolean
+        default: false
+      church:
+        description: "Only poll this church (its CHURCHES key). Leave blank for every enabled church."
+        type: string
+        default: ""
+
+# Only one poll run at a time. A new scheduled run cancels a stuck previous
+# one rather than queuing behind it — every write here is an idempotent
+# upsert-by-guid, so a canceled run leaves nothing to reconcile on the next.
+concurrency:
+  group: poll-church-feeds
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  poll:
+    name: Poll
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    permissions:
+      contents: write # to commit newly-discovered sermons back to data/
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Poll
+        env:
+          CHURCHES: ${{ vars.CHURCHES }}
+          NOTIFY_EMAIL_FROM: ${{ secrets.NOTIFY_EMAIL_FROM }}
+          NOTIFY_EMAIL_TO: ${{ secrets.NOTIFY_EMAIL_TO }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          args=()
+          if [ "${{ inputs.backfill }}" = "true" ]; then
+            args+=(--backfill)
+          fi
+          if [ -n "${{ inputs.church }}" ]; then
+            args+=(--church "${{ inputs.church }}")
+          fi
+          python -m poller.runner "${args[@]}"
+
+      - name: Commit newly-discovered sermons
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "No new sermons discovered this run."
+            exit 0
+          fi
+          git commit -m "chore(data): record newly-discovered sermons [skip ci]"
+          git push

@@ -67,18 +67,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up toolchain
-        run: echo "TODO — install your runtime"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
       - name: Install
-        run: echo "TODO — install deps from lockfile, fail on drift"
+        run: pip install -r requirements-dev.txt
       - name: Lint
         if: always()
-        run: echo "TODO — your lint command"
+        run: ruff check .
+      - name: Format check
+        if: always()
+        run: ruff format --check .
       - name: Typecheck
         if: always()
-        run: echo "TODO — your typecheck command"
+        run: mypy poller
       - name: Build
         if: always()
-        run: echo "TODO — your build command"
+        run: python -c "import poller.runner"
 
   test:
     name: Test
@@ -87,11 +93,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up toolchain
-        run: echo "TODO"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
       - name: Install
-        run: echo "TODO"
+        run: pip install -r requirements-dev.txt
       - name: Test
-        run: echo "TODO — your test command"
+        run: pytest
 
   # Evals: regression suite for the AI agent. PRs that regress evals don't merge.
   # Disable this job until you have ≥20 eval tasks in evals/tasks/ (see brief, Pillar 5).

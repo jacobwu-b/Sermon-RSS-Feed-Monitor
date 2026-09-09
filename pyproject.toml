@@ -1,0 +1,15 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The `poller` package isn't pip-installed (no packaging metadata for it) — put
+# the repo root on sys.path so `poller` resolves under the plain `pytest`
+# console script, not only under `python -m pytest` (which adds cwd itself).
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 110
+target-version = "py313"
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+disallow_untyped_defs = true
