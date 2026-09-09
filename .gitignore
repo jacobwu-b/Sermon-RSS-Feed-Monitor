@@ -46,3 +46,11 @@ vendor/
 # Local agent state — never commit
 .claude/local/
 .claude/sessions/
+
+# Internal template/methodology — kept locally, never pushed to this
+# public repo. Only product code and .github/ scaffolding are public.
+/CLAUDE.md
+/docs/
+/evals/
+/scripts/
+/.claude/
