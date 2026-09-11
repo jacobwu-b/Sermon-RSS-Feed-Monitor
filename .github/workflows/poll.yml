@@ -1,10 +1,11 @@
 # Polls every enabled church's RSS feed and commits any newly-discovered
 # sermons to data/<church>.json, emailing about them per CHURCHES' notify flag.
 #
-# Runs on GitHub Actions' minimum schedule granularity (5 minutes) so a new
-# episode is caught as close to publish time as realistically possible.
-# Scheduled runs can still be delayed or dropped under GitHub's load — this is
-# "as frequently as possible", not a delivery guarantee.
+# Primary trigger is an external scheduler (cron-job.org) calling the
+# workflow_dispatch REST API on a tight interval — GitHub's own `schedule:`
+# event below is a zero-cost fallback only, kept because schedule events are
+# delayed or dropped under GitHub's load and give no signal when that happens.
+# See ADR-0002 (docs/decisions/0002-external-dispatch-trigger-for-polling.md).
 
 name: Poll church feeds
 
@@ -22,12 +23,12 @@ on:
         type: string
         default: ""
 
-# Only one poll run at a time. A new scheduled run cancels a stuck previous
-# one rather than queuing behind it — every write here is an idempotent
-# upsert-by-guid, so a canceled run leaves nothing to reconcile on the next.
+# Only one poll run at a time. A new dispatch queues behind an in-flight run
+# rather than canceling it — frequent external dispatches must not pre-empt a
+# run before it can commit; timeout-minutes below bounds the worst case.
 concurrency:
   group: poll-church-feeds
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
