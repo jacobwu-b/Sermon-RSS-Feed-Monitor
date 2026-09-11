@@ -63,8 +63,8 @@ def item_to_record(item: SermonItem, *, first_seen_at: str, published_at: str | 
     """Build the JSON record for a newly-discovered item."""
     return {
         "guid": item.guid,
-        "title": item.title,
-        "raw_title": item.raw_title,
+        "title": item.title or None,
+        "raw_title": item.raw_title or None,
         "series": item.series,
         "speaker": item.speaker,
         "published_on": item.published_on or None,

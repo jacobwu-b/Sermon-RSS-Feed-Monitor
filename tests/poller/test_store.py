@@ -47,6 +47,14 @@ def test_item_to_record_discards_empty_strings_as_placeholders():
     assert record["blurb"] is None
 
 
+def test_item_to_record_treats_an_empty_title_as_null_like_episode_url_and_blurb():
+    item = _item()
+    item = item.__class__(**{**item.__dict__, "title": "", "raw_title": ""})
+    record = store.item_to_record(item, first_seen_at="now", published_at=None)
+    assert record["title"] is None
+    assert record["raw_title"] is None
+
+
 def test_save_is_idempotent_and_stable_on_key_order(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "DATA_DIR", tmp_path)
     record_b = store.item_to_record(_item("b"), first_seen_at="t1", published_at=None)
