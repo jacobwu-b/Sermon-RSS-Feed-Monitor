@@ -20,6 +20,9 @@ from poller.sources.base import SermonItem
 
 _RESEND_URL = "https://api.resend.com/emails"
 _TIMEOUT = 15
+# Resend rejects a subject at 2000+ chars; a real backlog of titles blows past
+# that long before then, so fall back to a count-only subject well under it.
+_MAX_SUBJECT_LEN = 200
 
 
 class NotifyError(RuntimeError):
@@ -30,6 +33,8 @@ def _format_email(church: str, items: list[SermonItem]) -> tuple[str, str]:
     """Return ``(subject, html_body)`` for one church's newly-discovered sermons."""
     noun = "sermon" if len(items) == 1 else "sermons"
     subject = f"New {noun} from {church}: " + "; ".join(item.title for item in items)
+    if len(subject) > _MAX_SUBJECT_LEN:
+        subject = f"New {len(items)} {noun} from {church}"
 
     rows = []
     for item in items:
