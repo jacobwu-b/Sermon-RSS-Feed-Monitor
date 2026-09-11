@@ -66,6 +66,22 @@ def test_send_new_sermons_posts_the_expected_payload(monkeypatch):
     assert "Jane Doe" in captured["body"]["html"]
 
 
+def test_send_new_sermons_sets_a_non_default_user_agent(monkeypatch):
+    """Regression: the stdlib default UA gets the request blocked by Resend's
+    edge as a bot signature (Cloudflare error 1010, 403) on every real send."""
+    captured = {}
+
+    def fake_urlopen(request, timeout):
+        captured["headers"] = {k.lower(): v for k, v in request.headers.items()}
+        return _FakeResponse(200)
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    notify.send_new_sermons("menlo", [_item()], _config())
+
+    assert "user-agent" in captured["headers"]
+    assert "python-urllib" not in captured["headers"]["user-agent"].lower()
+
+
 def test_send_new_sermons_raises_notify_error_on_http_error(monkeypatch):
     def fake_urlopen(request, timeout):
         raise urllib.error.HTTPError(request.full_url, 401, "Unauthorized", {}, io.BytesIO(b"denied"))

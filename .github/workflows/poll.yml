@@ -67,6 +67,11 @@ jobs:
           python -m poller.runner "${args[@]}"
 
       - name: Commit newly-discovered sermons
+        # Always runs, even if Poll exited non-zero (e.g. one church's
+        # notification failed): poll_church() writes each church's ledger to
+        # disk before attempting to notify, so a failure for one church must
+        # not discard every church's discovered sermons for the run.
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

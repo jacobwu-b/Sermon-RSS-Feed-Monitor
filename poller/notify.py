@@ -15,6 +15,7 @@ import urllib.error
 import urllib.request
 
 from poller.config import NotifyConfig
+from poller.net import DEFAULT_USER_AGENT
 from poller.sources.base import SermonItem
 
 _RESEND_URL = "https://api.resend.com/emails"
@@ -76,6 +77,9 @@ def send_new_sermons(church: str, items: list[SermonItem], config: NotifyConfig)
         headers={
             "Authorization": f"Bearer {config.api_key}",
             "Content-Type": "application/json",
+            # Resend's edge blocks the stdlib default UA as a bot signature
+            # (Cloudflare error 1010) — same fix as poller/net.py.
+            "User-Agent": DEFAULT_USER_AGENT,
         },
     )
     try:
