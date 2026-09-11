@@ -37,10 +37,14 @@ jobs:
     name: Poll
     runs-on: ubuntu-latest
     timeout-minutes: 4
-    permissions:
-      contents: write # to commit newly-discovered sermons back to data/
     steps:
+      # Deploy key (DEPLOY_KEY secret) authenticates the later `git push`, not
+      # GITHUB_TOKEN — main's ruleset requires a PR from everyone else, and
+      # this key is the one actor on its bypass list, so the push here must
+      # go over SSH with this key rather than the default token-authed remote.
       - uses: actions/checkout@v7
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
 
       - uses: actions/setup-python@v7
         with:
