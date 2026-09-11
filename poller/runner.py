@@ -5,7 +5,9 @@ named by ``--church``), independently — one church's feed being down, or its
 notification failing, never stops the others from being polled and recorded.
 ``--backfill`` seeds a church's ledger from its full feed history without
 sending any notification for what it adds, so a first run (or a run after
-adding a new church) doesn't blast an inbox with years of back-catalog.
+adding a new church) doesn't blast an inbox with years of back-catalog. Every
+run ends by regenerating ``data/README.md``'s stats section from whatever the
+ledgers now hold, whether or not this run found anything new.
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ import argparse
 import logging
 import sys
 
-from poller import config, notify, store
+from poller import config, notify, stats, store
 from poller.net import now
 from poller.sources import ADAPTERS
 
@@ -111,6 +113,13 @@ def run(*, church_names: list[str] | None, backfill: bool) -> bool:
             logger.exception("%s: poll crashed unexpectedly", name)
             ok = False
         all_ok = all_ok and ok
+
+    try:
+        stats.regenerate()
+    except stats.StatsError:
+        logger.exception("failed to regenerate data/README.md stats")
+        all_ok = False
+
     return all_ok
 
 

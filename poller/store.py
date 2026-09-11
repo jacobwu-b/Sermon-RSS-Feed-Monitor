@@ -4,7 +4,9 @@ Each record keeps every real field the source gave us — link, title, speaker,
 series, the service date, the instant the feed first made it available (when
 known), and the instant this poller first retrieved it — and nothing else.
 Upsert is idempotent on guid: a re-poll of an already-known sermon never
-duplicates it or clobbers its ``first_seen_at``/``published_at``.
+duplicates it or clobbers its ``first_seen_at``/``published_at``. Every write
+re-sorts the whole file newest-``published_on``-first, so opening a ledger
+always shows the latest sermon at the top.
 """
 
 from __future__ import annotations
@@ -31,13 +33,29 @@ def load(church: str) -> dict[str, dict[str, Any]]:
         return json.load(f)
 
 
+def _ordered_items(records: dict[str, dict[str, Any]]) -> list[tuple[str, dict[str, Any]]]:
+    """Newest-``published_on`` first; records missing it sort after every dated one.
+
+    Ties (same ``published_on``, or no ``published_on`` at all) break by
+    ``published_at`` then guid, both ascending — Python's sort is stable, so
+    sorting by guid first and then by date leaves equal-date groups in
+    guid-ascending order.
+    """
+    dated = [(guid, r) for guid, r in records.items() if r.get("published_on")]
+    undated = [(guid, r) for guid, r in records.items() if not r.get("published_on")]
+    undated.sort(key=lambda kv: kv[0])
+    dated.sort(key=lambda kv: kv[0])
+    dated.sort(key=lambda kv: (kv[1]["published_on"], kv[1].get("published_at") or ""), reverse=True)
+    return dated + undated
+
+
 def save(church: str, records: dict[str, dict[str, Any]]) -> None:
-    """Write a church's ledger back, sorted by guid for a stable, reviewable diff."""
+    """Write a church's ledger back, newest ``published_on`` first, for an easy-to-scan file."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     path = _record_path(church)
-    ordered = dict(sorted(records.items()))
+    ordered = dict(_ordered_items(records))
     with path.open("w", encoding="utf-8") as f:
-        json.dump(ordered, f, indent=2, sort_keys=True, ensure_ascii=False)
+        json.dump(ordered, f, indent=2, ensure_ascii=False)
         f.write("\n")
 
 

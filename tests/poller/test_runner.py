@@ -1,7 +1,9 @@
 from typing import ClassVar
 
-from poller import config, notify, runner, store
+from poller import config, notify, runner, stats, store
 from poller.sources.base import PollResult, SermonItem, SourceAdapter
+
+_MARKED_README = "# Sermon ledger\n\n<!-- STATS:START -->\nplaceholder\n<!-- STATS:END -->\n"
 
 
 def _item(guid: str) -> SermonItem:
@@ -131,6 +133,7 @@ def test_poll_church_returns_false_when_notification_fails(tmp_path, monkeypatch
 
 def test_run_skips_disabled_and_unselected_churches(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "DATA_DIR", tmp_path)
+    (tmp_path / "README.md").write_text(_MARKED_README, encoding="utf-8")
     monkeypatch.setattr(runner, "ADAPTERS", {"fake": _FakeAdapter})
     _FakeAdapter.items = [_item("g1")]
     _FakeAdapter.deferred = False
@@ -143,3 +146,37 @@ def test_run_skips_disabled_and_unselected_churches(tmp_path, monkeypatch):
     assert runner.run(church_names=None, backfill=False) is True
     assert set(store.load("fake")) == {"g1"}
     assert store.load("off") == {}
+
+
+def test_run_regenerates_readme_stats_even_when_nothing_new_is_found(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "DATA_DIR", tmp_path)
+    (tmp_path / "README.md").write_text(_MARKED_README, encoding="utf-8")
+    monkeypatch.setattr(runner, "ADAPTERS", {"fake": _FakeAdapter})
+    _FakeAdapter.items = []
+    _FakeAdapter.deferred = False
+    monkeypatch.setenv(
+        "CHURCHES", '{"fake": {"rss": "https://example.org/feed.xml", "enabled": true, "notify": false}}'
+    )
+
+    assert runner.run(church_names=None, backfill=False) is True
+    assert "placeholder" not in (tmp_path / "README.md").read_text(encoding="utf-8")
+
+
+def test_run_reports_failure_when_stats_regeneration_fails(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "DATA_DIR", tmp_path)
+    (tmp_path / "README.md").write_text(_MARKED_README, encoding="utf-8")
+    monkeypatch.setattr(runner, "ADAPTERS", {"fake": _FakeAdapter})
+    _FakeAdapter.items = [_item("g1")]
+    _FakeAdapter.deferred = False
+    monkeypatch.setenv(
+        "CHURCHES", '{"fake": {"rss": "https://example.org/feed.xml", "enabled": true, "notify": false}}'
+    )
+
+    def _boom():
+        raise stats.StatsError("markers missing")
+
+    monkeypatch.setattr(stats, "regenerate", _boom)
+
+    # The ledger write itself still succeeded; only the stats step failed.
+    assert runner.run(church_names=None, backfill=False) is False
+    assert set(store.load("fake")) == {"g1"}

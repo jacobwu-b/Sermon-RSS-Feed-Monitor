@@ -2,19 +2,24 @@ from poller import store
 from poller.sources.base import SermonItem
 
 
-def _item(guid: str = "g1") -> SermonItem:
+def _item(guid: str = "g1", published_on: str = "2026-09-06") -> SermonItem:
     return SermonItem(
         guid=guid,
         title="Hear and Do",
         raw_title="Hear and Do - Luke",
         series="Luke",
         speaker="Jane Doe",
-        published_on="2026-09-06",
+        published_on=published_on,
         published_at=None,
         episode_url="https://example.org/ep1",
         audio_url="https://example.org/ep1.mp3",
         blurb="A sermon on Luke.",
     )
+
+
+def _record(guid: str, *, published_on: str | None, published_at: str | None = None) -> dict:
+    item = _item(guid, published_on=published_on or "")
+    return store.item_to_record(item, first_seen_at="t", published_at=published_at)
 
 
 def test_load_returns_empty_dict_for_a_church_with_no_ledger_yet(tmp_path, monkeypatch):
@@ -53,3 +58,38 @@ def test_save_is_idempotent_and_stable_on_key_order(tmp_path, monkeypatch):
     store.save("menlo", store.load("menlo"))
     assert path.read_text(encoding="utf-8") == first_write
     assert list(store.load("menlo").keys()) == ["a", "b"]
+
+
+def test_save_orders_records_newest_published_on_first(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "DATA_DIR", tmp_path)
+    records = {
+        "old": _record("old", published_on="2026-07-05"),
+        "new": _record("new", published_on="2026-09-06"),
+        "mid": _record("mid", published_on="2026-08-16"),
+    }
+    store.save("menlo", records)
+    assert list(store.load("menlo").keys()) == ["new", "mid", "old"]
+
+
+def test_save_breaks_same_date_ties_by_published_at_then_guid(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "DATA_DIR", tmp_path)
+    records = {
+        "b": _record("b", published_on="2026-09-06", published_at="2026-09-06T10:00:00+00:00"),
+        "a": _record("a", published_on="2026-09-06", published_at="2026-09-06T12:00:00+00:00"),
+        "c": _record("c", published_on="2026-09-06", published_at=None),
+    }
+    store.save("menlo", records)
+    # "a" has the later published_at; "c" has none and ties break by guid among
+    # remaining same-date records without a published_at.
+    assert list(store.load("menlo").keys()) == ["a", "b", "c"]
+
+
+def test_save_sorts_records_missing_published_on_after_every_dated_record(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "DATA_DIR", tmp_path)
+    records = {
+        "undated_b": _record("undated_b", published_on=None),
+        "dated": _record("dated", published_on="2026-01-04"),
+        "undated_a": _record("undated_a", published_on=None),
+    }
+    store.save("menlo", records)
+    assert list(store.load("menlo").keys()) == ["dated", "undated_a", "undated_b"]
