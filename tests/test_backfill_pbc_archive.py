@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from poller import store
 from poller.net import FeedFetchError
+from poller.sources.base import SermonItem
 from scripts import backfill_pbc_archive as backfill
 
 
@@ -57,6 +58,37 @@ def test_run_is_a_no_op_on_a_second_run_against_the_same_listing(tmp_path, monke
     assert (
         store.load("pbc")["pbc-archive:Main_Service/2019/01/06/20190106.mp3"]["first_seen_at"] == first_seen
     )
+
+
+def test_run_skips_a_date_already_covered_by_a_live_feed_record(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "DATA_DIR", tmp_path)
+    live_item = store.item_to_record(
+        SermonItem(
+            guid="https://pbc.org?enmse_mid=4690",
+            title="No Middle Ground",
+            raw_title="No Middle Ground",
+            series=None,
+            speaker=None,
+            published_on="2026-09-06",
+            published_at=None,
+            episode_url="https://pbc.org/sermons?enmse_mid=4690",
+            audio_url="https://s3.us-west-2.amazonaws.com/cdn.pbc.org/Main_Service/2026/09/06/x.mp3",
+            blurb="",
+        ),
+        first_seen_at="t0",
+        published_at="2026-09-07T18:00:00+00:00",
+    )
+    store.save("pbc", {live_item["guid"]: live_item})
+    objects = [
+        ("Main_Service/2026/09/06/Sermon Audio 2026-09-06.mp3", datetime(2026, 9, 7, 18, 0, tzinfo=UTC))
+    ]
+    _listing(monkeypatch=monkeypatch, objects=objects)
+
+    result = backfill.run(dry_run=False)
+
+    assert result.added == []
+    assert result.already_covered_skipped == 1
+    assert set(store.load("pbc")) == {"https://pbc.org?enmse_mid=4690"}
 
 
 def test_dry_run_writes_nothing(tmp_path, monkeypatch):
