@@ -98,6 +98,10 @@ The ruleset must enforce, **for everyone except the documented bypass**:
       after it has already done the expensive part of its work. If you rebuild
       the ruleset, re-add them in the same sitting and then exercise the
       automation to confirm the push still lands.
+      - Live: `DeployKey` / `always`, matching the write-access deploy key
+        titled `poll-workflow-push` (repo Settings → Deploy keys), whose
+        private half is the `DEPLOY_KEY` secret `.github/workflows/poll.yml`
+        uses to push `data/` updates straight to `main`.
   - **A credential used by automation is two settings, and they drift apart
     silently:** the bypass or permission entry, and the secret itself. A key on
     the bypass list that no workflow holds cannot sign a push; a key the
